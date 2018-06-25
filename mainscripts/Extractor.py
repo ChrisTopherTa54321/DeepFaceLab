@@ -196,6 +196,8 @@ class ExtractSubprocessor(SubprocessorBase):
                     self.keras = gpufmkmgr.import_keras()
                     self.e = facelib.MTCExtractor(self.keras, self.tf, self.tf_session)                            
                 elif self.detector == 'dlib':
+                    self.tf = gpufmkmgr.import_tf ([self.device_idx], allow_growth=True)
+                    self.tf_session = gpufmkmgr.get_tf_session()
                     self.dlib = gpufmkmgr.import_dlib( self.device_idx )
                     self.e = facelib.DLIBExtractor(self.dlib)
                 self.e.__enter__()

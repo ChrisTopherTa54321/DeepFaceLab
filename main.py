@@ -26,6 +26,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()    
     parser.add_argument('--tf-suppress-std', action="store_true", dest="tf_suppress_std", default=False, help="Suppress tensorflow initialization info. May not works on some python builds such as anaconda python 3.6.4. If you can fix it, you are welcome.")
+    parser.add_argument('--pydevd', action="store_true", dest="pydevd", default=False, help="Break in the pydevd debugger")
  
     subparsers = parser.add_subparsers()
     
@@ -39,10 +40,12 @@ if __name__ == "__main__":
             detector=arguments.detector,
             multi_gpu=arguments.multi_gpu,
             manual_fix=arguments.manual_fix,
-            manual_window_size=arguments.manual_window_size)
+            manual_window_size=arguments.manual_window_size,
+            recursive=arguments.recursive)
         
     extract_parser = subparsers.add_parser( "extract", help="Extract the faces from a pictures.")
     extract_parser.add_argument('--input-dir', required=True, action=fixPathAction, dest="input_dir", help="Input directory. A directory containing the files you wish to process.")
+    extract_parser.add_argument('--recursive', required=False, default=False, action="store_true", help="Recursively search input directory")
     extract_parser.add_argument('--output-dir', required=True, action=fixPathAction, dest="output_dir", help="Output directory. This is where the extracted files will be stored.")
     extract_parser.add_argument('--debug', action="store_true", dest="debug", default=False, help="Writes debug images to [output_dir]_debug\ directory.")    
     extract_parser.add_argument('--face-type', dest="face_type", choices=['half_face', 'full_face', 'head', 'avatar', 'mark_only'], default='full_face', help="Default 'full_face'. Don't change this option, currently all models uses 'full_face'")    
@@ -179,6 +182,11 @@ if __name__ == "__main__":
     arguments = parser.parse_args()
     if arguments.tf_suppress_std:
         os.environ['TF_SUPPRESS_STD'] = '1'
+    if arguments.pydevd:
+        import pydevd
+        os.environ['PYDEVD_DEBUGGING'] = '1'
+        print("Enabling pydevd debugging")
+        pydevd.settrace(suspend=False)
     arguments.func(arguments)
 
 

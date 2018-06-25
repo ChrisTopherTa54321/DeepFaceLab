@@ -3,6 +3,7 @@ from tqdm import tqdm
 import multiprocessing
 import time
 import sys
+import os
 
 class SubprocessorBase(object):
 
@@ -221,6 +222,10 @@ class SubprocessorBase(object):
             print (fail_message)
             cq.put ( {'op': 'error', 'close': True} )
             return 
+
+        if 'PYDEVD_DEBUGGING' in os.environ and os.environ['PYDEVD_DEBUGGING']:
+            import pydevd
+            pydevd.settrace(suspend=False)
 
         while True:
             obj = sq.get()

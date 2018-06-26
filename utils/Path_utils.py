@@ -22,13 +22,12 @@ def get_image_unique_filestem_paths(dir_path, verbose=False, recursive=False):
     result_dup = set()
 
     for f in result[:]:
-        f_stem = Path(f).stem
-        if f_stem in result_dup:
+        if f in result_dup:
             result.remove(f)
             if verbose:
-                print ("Duplicate filenames are not allowed, skipping: %s" % Path(f).name )
+                print ("Duplicate filenames are not allowed, skipping: %s" % f )
             continue
-        result_dup.add(f_stem)
+        result_dup.add(f)
 
     return result
 

@@ -240,19 +240,16 @@ class ExtractSubprocessor(SubprocessorBase):
             elif self.type == 'final':
                 result = []
                 faces = data[1]
-                trimmed_file_path = filename_path.replace( self.input_path, '' )
-                trimmed_file_path = trimmed_file_path.lstrip("\\").lstrip("/")
-                full_output_path = os.path.join( self.output_path, trimmed_file_path )
-                os.makedirs( os.path.dirname(full_output_path), exist_ok=True)
-                fname,fext = os.path.splitext(os.path.basename(full_output_path))
+
+                rel_output_name, abs_output_name, debug_file_name = ExtractSubprocessor.GenerateOutputPaths( filename_path, self.input_path, self.output_path )
+                os.makedirs( os.path.dirname(abs_output_name), exist_ok=True)
                 if self.debug:
-                    debug_output_path = os.path.join( os.path.dirname(full_output_path), "debug")
-                    os.makedirs( debug_output_path, exist_ok=True)
-                    debug_output_file = os.path.join( debug_output_path, "{}_debug{}".format(fname,fext) )
+                    os.makedirs( os.path.dirname(debug_file_name), exist_ok=True)
                     debug_image = image.copy()
 
                 for (face_idx, face) in enumerate(faces):
-                    output_file = os.path.join( os.path.dirname(full_output_path), "{}_{}{}".format(fname, face_idx, fext ) )
+                    out_path,out_ext = os.path.splitext(abs_output_name)
+                    output_file = "{}_{}{}".format( out_path, face_idx, out_ext )
                     rect = face[0]
                     image_landmarks = np.array(face[1])
 
@@ -276,7 +273,7 @@ class ExtractSubprocessor(SubprocessorBase):
                       'landmarks': face_image_landmarks.tolist(),
                       'yaw_value': facelib.LandmarksProcessor.calc_face_yaw (face_image_landmarks),
                       'pitch_value': facelib.LandmarksProcessor.calc_face_pitch (face_image_landmarks),
-                      'source_filename': os.path.basename(full_output_path),
+                      'source_filename': rel_output_name,
                       'source_rect': rect,
                       'source_landmarks': image_landmarks.tolist()
                     }
@@ -286,7 +283,7 @@ class ExtractSubprocessor(SubprocessorBase):
                     result.append (output_file)
 
                 if self.debug:
-                    cv2.imwrite(debug_output_file, debug_image )
+                    cv2.imwrite(debug_file_name, debug_image )
 
                 return result
         return None
@@ -327,6 +324,20 @@ class ExtractSubprocessor(SubprocessorBase):
     def get_start_return(self):
         return self.result
 
+    @staticmethod
+    def GenerateOutputPaths( file_path, input_path, output_path ):
+        file_name = os.path.basename(file_path)
+        input_path = str(input_path)
+        name, ext = os.path.splitext(file_name)
+        input_path_trailing_slash = os.path.join(input_path,'')
+        output_folder_trailing_slash = os.path.join( os.path.dirname( file_path ),'' )
+        output_folders = output_folder_trailing_slash.replace( input_path_trailing_slash,'')
+
+        relative_output_name = os.path.join( output_folders, file_name )
+        abs_output_file_name = os.path.join( output_path, relative_output_name )
+        debug_file_name = os.path.join( output_path, output_folders, "debug", "{}_debug{}".format(name, ext) )
+        return relative_output_name, abs_output_file_name, debug_file_name
+
 '''
 detector
     'dlib'
@@ -337,7 +348,7 @@ face_type
     'full_face'
     'avatar'
 '''
-def main (input_dir, output_dir, debug, detector='mt', multi_gpu=True, manual_fix=False, manual_window_size=0, image_size=256, face_type='full_face', recursive=False):
+def main (input_dir, output_dir, debug, detector='mt', multi_gpu=True, manual_fix=False, manual_window_size=0, image_size=256, face_type='full_face', recursive=False, remove_existing=False):
     print ("Running extractor.\r\n")
 
     input_path = Path(input_dir)
@@ -348,21 +359,34 @@ def main (input_dir, output_dir, debug, detector='mt', multi_gpu=True, manual_fi
         print('Input directory not found. Please ensure it exists.')
         return
 
-    if output_path.exists():
-        for filename in Path_utils.get_image_paths(output_path, recursive=recursive):
-            Path(filename).unlink()
-    else:
-        output_path.mkdir(parents=True, exist_ok=True)
 
-    if debug:
-        debug_output_path = Path(str(output_path) + '_debug')
-        if debug_output_path.exists():
-            for filename in Path_utils.get_image_paths(debug_output_path, recursive=recursive):
-                Path(filename).unlink()
-        else:
-            debug_output_path.mkdir(parents=True, exist_ok=True)
+
+#     if output_path.exists() and remove_existing:
+#         for filename in Path_utils.get_image_paths(output_path, recursive=recursive):
+#             Path(filename).unlink()
+#     else:
+#         output_path.mkdir(parents=True, exist_ok=True)
+#
+#     if debug:
+#         debug_output_path = Path(str(output_path) + '_debug')
+#         if debug_output_path.exists() and remove_existing:
+#             for filename in Path_utils.get_image_paths(debug_output_path, recursive=recursive):
+#                 Path(filename).unlink()
+#         else:
+#             debug_output_path.mkdir(parents=True, exist_ok=True)
 
     input_path_image_paths = Path_utils.get_image_unique_filestem_paths(input_path, verbose=True, recursive=recursive)
+    if not remove_existing:
+        for item in input_path_image_paths[:]:
+            _, abs_output_name,_ = ExtractSubprocessor.GenerateOutputPaths( item, input_path, output_path )
+            fname, fext = os.path.splitext(abs_output_name)
+            face_file_name = os.path.join( "{}.skip".format( fname ))
+            for face_idx in range(5):
+                if os.path.exists( face_file_name ):
+                    input_path_image_paths.remove(item)
+                    break
+                face_file_name = os.path.join( "{}_{}{}".format(fname, face_idx, fext))
+
     images_found = len(input_path_image_paths)
     faces_detected = 0
     if images_found != 0:

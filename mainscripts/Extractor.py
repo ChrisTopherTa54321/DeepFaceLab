@@ -45,7 +45,7 @@ class ExtractSubprocessor(SubprocessorBase):
             self.param_x = -1
             self.param_y = -1
             self.param_rect_size = -1
-            self.param = {'x': 0, 'y': 0, 'rect_size' : 5, 'rect_locked' : False, 'redraw_needed' : False }
+            self.param = {'x': 0, 'y': 0, 'rect_size' : 5, 'rect_locked' : False, 'redraw_needed' : False, 'skipped': False }
 
             def onMouse(event, x, y, flags, param):
                 if event == cv2.EVENT_MOUSEWHEEL:
@@ -117,20 +117,27 @@ class ExtractSubprocessor(SubprocessorBase):
             while len (self.input_data) > 0:
                 data = self.input_data[0]
                 filename, faces = data
+
                 is_frame_done = False
                 go_to_prev_frame = False
 
-                # Can we mark an image that already has a marked face?
-                if allow_remark_faces:
-                    allow_remark_faces = False
-                    # If there was already a face then lock the rectangle to it until the mouse is clicked
-                    if len(faces) > 0:
-                        prev_rect = faces.pop()[0]
-                        self.param['rect_locked'] = True
+                if self.param['redraw_needed']:
+                    # New frame. Assume rect is locked and not skipped
+                    self.param['rect_locked'] = False
+                    self.param['skipped'] = False
+                    if faces and faces[0]:
+                        # Can we mark an image that already has a marked face?
+                        if allow_remark_faces:
+                            prev_rect = faces.pop()[0]
+                            self.param['rect_locked'] = True
+                            faces.clear()
+                            self.param['rect_size'] = ( prev_rect[2] - prev_rect[0] ) / 2
+                            self.param['x'] = ( ( prev_rect[0] + prev_rect[2] ) / 2 ) * self.view_scale
+                            self.param['y'] = ( ( prev_rect[1] + prev_rect[3] ) / 2 ) * self.view_scale
+                    elif faces:
+                        # A face of 'None' marks a skipped frame
+                        self.param['skipped'] = True
                         faces.clear()
-                        self.param['rect_size'] = ( prev_rect[2] - prev_rect[0] ) / 2
-                        self.param['x'] = ( ( prev_rect[0] + prev_rect[2] ) / 2 ) * self.view_scale
-                        self.param['y'] = ( ( prev_rect[1] + prev_rect[3] ) / 2 ) * self.view_scale
 
                 if len(faces) == 0:
                     self.original_image = cv2.imread(filename)
@@ -154,23 +161,30 @@ class ExtractSubprocessor(SubprocessorBase):
                         key = cv2.waitKey(1) & 0xFF
 
                         if key == ord('\r') or key == ord('\n'):
+                            self.param['rect_locked'] = True
                             faces.append ( [(self.rect), self.landmarks] )
                             is_frame_done = True
                             break
                         elif key == ord(' '):
                             is_frame_done = True
+                            self.param['skipped'] = True
+                            faces.append( None )
                             break
-                        elif key == ord('.'):
+                        elif key == ord('.') and len(self.input_data) > 1:
                             allow_remark_faces = True
                             # Only save the face if the rect is still locked
                             if self.param['rect_locked']:
                                 faces.append ( [(self.rect), self.landmarks] )
+                            elif self.param['skipped']:
+                                faces.append( None )
                             is_frame_done = True
                             break
                         elif key == ord(',')  and len(self.result) > 0:
                             # Only save the face if the rect is still locked
                             if self.param['rect_locked']:
                                 faces.append ( [(self.rect), self.landmarks] )
+                            elif self.param['skipped']:
+                                faces.append( None )
                             go_to_prev_frame = True
                             break
                         elif key == ord('q'):
@@ -297,8 +311,13 @@ class ExtractSubprocessor(SubprocessorBase):
                     os.makedirs( os.path.dirname(debug_file_name), exist_ok=True)
                     debug_image = image.copy()
 
+                out_path,out_ext = os.path.splitext(abs_output_name)
                 for (face_idx, face) in enumerate(faces):
-                    out_path,out_ext = os.path.splitext(abs_output_name)
+                    if face is None: # indicates skip
+                        output_file = "{}.skip".format( out_path )
+                        open( output_file, 'w' )
+                        break
+
                     output_file = "{}_{}{}".format( out_path, face_idx, out_ext )
                     rect = face[0]
                     image_landmarks = np.array(face[1])
@@ -355,6 +374,8 @@ class ExtractSubprocessor(SubprocessorBase):
 
             if self.param['rect_locked']:
                 facelib.draw_landmarks(image, view_landmarks, (255,255,0) )
+            elif self.param['skipped']:
+                facelib.draw_landmarks(image, view_landmarks, (0,0,255) )
             self.param['redraw_needed'] = False
 
             cv2.imshow (self.wnd_name, image)

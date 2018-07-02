@@ -457,12 +457,16 @@ def main (input_dir, output_dir, debug, detector='mt', multi_gpu=True, manual_fi
         for item in input_path_image_paths[:]:
             _, abs_output_name,_ = ExtractSubprocessor.GenerateOutputPaths( item, input_path, output_path )
             fname, fext = os.path.splitext(abs_output_name)
-            face_file_name = os.path.join( "{}.skip".format( fname ))
+            face_names = []
+            face_names.append( os.path.join( "{}.skip".format( fname )) )
+            face_names.append( os.path.join(abs_output_name) )
             for face_idx in range(5):
+                face_names.append( os.path.join( "{}_{}{}".format(fname, face_idx, fext)) )
+
+            for face_file_name in face_names:
                 if os.path.exists( face_file_name ):
                     input_path_image_paths.remove(item)
                     break
-                face_file_name = os.path.join( "{}_{}{}".format(fname, face_idx, fext))
 
     images_found = len(input_path_image_paths)
     faces_detected = 0

@@ -337,7 +337,7 @@ def restore_origname(input_path):
         filepath = Path(filepath)
 
         if filepath.suffix != '.png':
-            print ("%s is not a png file required for sort_by_origname" % (filepath.name)
+            print ("%s is not a png file required for sort_by_origname" % (filepath.name) )
             continue
 
         a_png = AlignedPNG.load (str(filepath))

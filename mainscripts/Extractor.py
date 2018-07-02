@@ -45,7 +45,7 @@ class ExtractSubprocessor(SubprocessorBase):
             self.param_x = -1
             self.param_y = -1
             self.param_rect_size = -1
-            self.param = {'x': 0, 'y': 0, 'rect_size' : 5, 'rect_locked' : False, 'redraw_needed' : False, 'skipped': False }
+            self.param = {'x': 0, 'y': 0, 'rect_size' : 5, 'rect_locked' : False, 'redraw_needed' : True, 'skipped': False }
 
             def onMouse(event, x, y, flags, param):
                 if event == cv2.EVENT_MOUSEWHEEL:
@@ -125,6 +125,24 @@ class ExtractSubprocessor(SubprocessorBase):
                     # New frame. Assume rect is locked and not skipped
                     self.param['rect_locked'] = False
                     self.param['skipped'] = False
+
+                    # Update frame from file
+                    self.original_image = cv2.imread(filename)
+
+                    (h,w,c) = self.original_image.shape
+                    self.view_scale = 1.0 if self.manual_window_size == 0 else self.manual_window_size / (w if w > h else h)
+                    self.original_image = cv2.resize (self.original_image, ( int(w*self.view_scale), int(h*self.view_scale) ), interpolation=cv2.INTER_LINEAR)
+
+                    self.text_lines_img = (image_utils.get_draw_text_lines ( self.original_image, (0,0, self.original_image.shape[1], min(100, self.original_image.shape[0]) ),
+                                                    [   'Match landmarks with face exactly. Click to confirm/unconfirm selection',
+                                                        '[Enter] - confirm and continue to next unmarked frame',
+                                                        '[Space] - skip to next unmarked frame',
+                                                        '[Mouse wheel] - change rect',
+                                                        '[,] [.]- prev frame, next frame',
+                                                        '[Q] - skip remaining frames'
+                                                    ], (1, 1, 1) )*255).astype(np.uint8)
+                    self.annotated_img = cv2.addWeighted (self.original_image,1.0,self.text_lines_img,1.0,0)
+
                     if faces and faces[0]:
                         # Can we mark an image that already has a marked face?
                         if allow_remark_faces:
@@ -139,24 +157,8 @@ class ExtractSubprocessor(SubprocessorBase):
                         self.param['skipped'] = True
                         faces.clear()
 
+                (h,w,c) = self.original_image.shape
                 if len(faces) == 0:
-                    self.original_image = cv2.imread(filename)
-
-                    (h,w,c) = self.original_image.shape
-
-                    self.view_scale = 1.0 if self.manual_window_size == 0 else self.manual_window_size / (w if w > h else h)
-                    self.original_image = cv2.resize (self.original_image, ( int(w*self.view_scale), int(h*self.view_scale) ), interpolation=cv2.INTER_LINEAR)
-                    (h,w,c) = self.original_image.shape
-
-                    self.text_lines_img = (image_utils.get_draw_text_lines ( self.original_image, (0,0, self.original_image.shape[1], min(100, self.original_image.shape[0]) ),
-                                                    [   'Match landmarks with face exactly. Click to confirm/unconfirm selection',
-                                                        '[Enter] - confirm and continue to next unmarked frame',
-                                                        '[Space] - skip to next unmarked frame',
-                                                        '[Mouse wheel] - change rect',
-                                                        '[,] [.]- prev frame, next frame',
-                                                        '[Q] - skip remaining frames'
-                                                    ], (1, 1, 1) )*255).astype(np.uint8)
-
                     while True:
                         key = cv2.waitKey(1) & 0xFF
 
@@ -367,7 +369,7 @@ class ExtractSubprocessor(SubprocessorBase):
         if self.manual == True:
             self.landmarks = result[1][0][1]
 
-            image = cv2.addWeighted (self.original_image,1.0,self.text_lines_img,1.0,0)
+            image = self.annotated_img.copy()
             view_rect = (np.array(self.rect) * self.view_scale).astype(np.int).tolist()
             view_landmarks  = (np.array(self.landmarks) * self.view_scale).astype(np.int).tolist()
             facelib.LandmarksProcessor.draw_rect_landmarks (image, view_rect, view_landmarks, self.image_size, self.face_type)

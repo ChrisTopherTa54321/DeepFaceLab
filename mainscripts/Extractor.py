@@ -26,6 +26,7 @@ class ExtractSubprocessor(SubprocessorBase):
         self.debug = debug
         self.multi_gpu = multi_gpu
         self.detector = detector
+        self.original_image = None
         self.output_path = output_path
         self.input_path = str(input_path)
         self.manual = manual
@@ -126,8 +127,9 @@ class ExtractSubprocessor(SubprocessorBase):
                     self.param['rect_locked'] = False
                     self.param['skipped'] = False
 
-                    # Update frame from file
-                    self.original_image = cv2.imread(filename)
+                    new_image = cv2.imread(filename)
+                    old_image = self.original_image
+                    self.original_image = new_image
 
                     (h,w,c) = self.original_image.shape
                     self.view_scale = 1.0 if self.manual_window_size == 0 else self.manual_window_size / (w if w > h else h)
@@ -156,6 +158,44 @@ class ExtractSubprocessor(SubprocessorBase):
                         # A face of 'None' marks a skipped frame
                         self.param['skipped'] = True
                         faces.clear()
+                    elif old_image is not None:
+                        # Unmarked frame
+                        # Motion Estimation
+                        # Create some random colors
+                        color = np.random.randint(0,255,(100,3))
+                        # Create a mask image for drawing purposes
+
+                        rx1,ry1,rx2,ry2 = int(self.rect[0]), int(self.rect[1]), int(self.rect[2]), int(self.rect[3])
+                        old_est_img = old_image[ry1:ry2, rx1:rx2]
+                        new_est_img = self.original_image[ry1:ry2, rx1:rx2]
+                        # params for ShiTomasi corner detection
+                        feature_params = dict( maxCorners = 100,
+                                               qualityLevel = 0.3,
+                                               minDistance = 7,
+                                               blockSize = 7 )
+
+                        # Parameters for lucas kanade optical flow
+                        lk_params = dict( winSize  = (15,15),
+                                          maxLevel = 2,
+                                          criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+                        old_gray = cv2.cvtColor( old_est_img, cv2.COLOR_BGR2GRAY)
+                        p0 = cv2.goodFeaturesToTrack(old_gray, mask = None, **feature_params)
+                        new_gray = cv2.cvtColor( new_est_img, cv2.COLOR_BGR2GRAY)
+                        p1, st, err = cv2.calcOpticalFlowPyrLK(old_gray, new_gray, p0, None, **lk_params)
+                        # Select good points
+                        good_new = p1[st==1]
+                        good_old = p0[st==1]
+                        # draw the tracks
+                        avg=[0,0]
+                        for i,(new,old) in enumerate(zip(good_new,good_old)):
+                            a,b = new.ravel()
+                            c,d = old.ravel()
+                            avg[0] += a-c
+                            avg[1] += b-d
+                        avg[0] /= len(good_new)
+                        avg[1] /= len(good_new)
+                        self.param['x'] += int( avg[0] )
+                        self.param['y'] += int( avg[1] )
 
                 (h,w,c) = self.original_image.shape
                 if len(faces) == 0:
